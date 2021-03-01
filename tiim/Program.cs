@@ -1,52 +1,50 @@
-﻿using Discord;
-using Discord.Commands;
-using Discord.WebSocket;
-using Microsoft.Extensions.DependencyInjection;
-using System;
-using System.Threading;
+﻿using System;
 using System.Threading.Tasks;
+using DSharpPlus;
+using DSharpPlus.CommandsNext;
+using DSharpPlus.VoiceNext;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using tiim.Commands;
 
 namespace tiim
 {
   class Program
   {
-    public static void Main(string[] args)
-    => new Program().MainAsync().GetAwaiter().GetResult();
-
-    private DiscordSocketClient _client;
-    public async Task MainAsync()
+    static void Main(string[] args)
     {
-      using (var services = ConfigureServices())
+      MainAsync().GetAwaiter().GetResult();
+    }
+
+    static async Task MainAsync()
+    {
+      var discord = new DiscordClient(new DiscordConfiguration()
       {
-        var client = services.GetRequiredService<DiscordSocketClient>();
+        Token = Environment.GetEnvironmentVariable("DISCORD_BOT"),
+        TokenType = TokenType.Bot,
+        MinimumLogLevel = LogLevel.Debug
+      });
 
-        client.Log += Log;
-        services.GetRequiredService<CommandService>().Log += Log;
+      var services = new ServiceCollection()
+        .AddSingleton<Random>()
+        .BuildServiceProvider();
 
-        // Tokens should be considered secret data and never hard-coded.
-        // We can read from the environment variable to avoid hardcoding.
-        await client.LoginAsync(TokenType.Bot, Environment.GetEnvironmentVariable("DISCORD_BOT"));
-        await client.StartAsync();
+      var commands = discord.UseCommandsNext(new CommandsNextConfiguration()
+      {
+        Services = services,
+        StringPrefixes = new[] { "!" }
+      });
 
-        // Here we initialize the logic required to register our commands.
-        await services.GetRequiredService<CommandHandler>().InstallCommandsAsync();
+      discord.UseVoiceNext(new VoiceNextConfiguration()
+      {
+        EnableIncoming = true
+      });
 
-        await Task.Delay(Timeout.Infinite);
-      }
+      commands.RegisterCommands<MyModule>();
+
+      await discord.ConnectAsync();
+      await Task.Delay(-1);
     }
-    private Task Log(LogMessage msg)
-    {
-      Console.WriteLine(msg.ToString());
-      return Task.CompletedTask;
-    }
 
-    private ServiceProvider ConfigureServices()
-    {
-      return new ServiceCollection()
-          .AddSingleton<DiscordSocketClient>()
-          .AddSingleton<CommandService>()
-          .AddSingleton<CommandHandler>()
-          .BuildServiceProvider();
-    }
   }
 }
